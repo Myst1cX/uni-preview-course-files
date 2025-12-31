@@ -4,6 +4,9 @@ Glossary to Quizlet Flashcard Parser - Final Version
 
 Parses HTML glossary entries and formats them for Quizlet import.
 Output: <Name>, <Type>, <Pronunciation> ; <Definition>, <Example>, <Translation>
+
+Note: This parser uses regex for HTML parsing as it's designed for a specific,
+known HTML structure. For general-purpose HTML parsing, consider using BeautifulSoup.
 """
 
 import re
@@ -70,7 +73,11 @@ def parse_glossary_entries(html_content):
 
 
 def extract_type(text):
-    """Extract word type"""
+    """Extract word type (noun, verb, etc.)
+    
+    Supports single or multiple types: "noun", "noun, idiom", "noun (formal)"
+    """
+    # Pattern matches common word types with optional parenthetical and comma-separated formats
     pattern = r'\b(noun|verb|adjective|adverb|idiom|phrase|pronoun|preposition|conjunction|interjection)(?:\s*\([^)]*\))?(?:\s*,\s*(noun|verb|adjective|adverb|idiom|phrase|pronoun|preposition|conjunction|interjection))?'
     match = re.search(pattern, text, re.IGNORECASE)
     
@@ -216,6 +223,7 @@ def main():
     
     # Format for Quizlet
     lines = [e.format_for_quizlet() for e in entries]
+    # Remove duplicates while preserving order (dict keys maintain insertion order in Python 3.7+)
     unique_lines = list(dict.fromkeys(lines))
     
     # Save output
