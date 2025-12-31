@@ -1,0 +1,14 @@
+# Glossary parser input/output files
+glossary items in page html.txt
+quizlet-flashcards.txt
+
+# Node modules
+node_modules/
+
+# Build artifacts
+dist/
+build/
+
+# Temporary files
+*.tmp
+*.log

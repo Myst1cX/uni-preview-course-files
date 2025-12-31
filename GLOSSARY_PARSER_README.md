@@ -4,21 +4,18 @@ This tool parses HTML pages containing glossary entries and formats them for dir
 
 ## Requirements
 
-- **Node.js** (for `glossary-parser.js`) OR
-- **Python 3** (for `glossary-parser.py`)
+- **Python 3** (recommended) - for `glossary-parser.py`
 
 ## Usage
-
-### Method 1: Using Python (Recommended)
 
 ```bash
 python3 glossary-parser.py "glossary items in page html.txt"
 ```
 
-### Method 2: Using Node.js
+Or if the file is in the current directory with the default name:
 
 ```bash
-node glossary-parser.js "glossary items in page html.txt"
+python3 glossary-parser.py
 ```
 
 ## Input
@@ -33,11 +30,12 @@ The parser will create a file named `quizlet-flashcards.txt` with entries format
 <Concept Name>, <Type>, <Pronunciation> ; <Definition>, <Example Sentence>, <Slovenian Translation>
 ```
 
-### Example Output
+## Example Output Format
 
 ```
-Ameliorate, Verb, UK: /əˈmiːliəreɪt/ ; To make something bad or unsatisfactory better, The new measures are designed to ameliorate social problems, Novi ukrepi so namenjeni izboljšanju družbenih problemov
-Curiosity, Noun, UK: /ˌkjʊəriˈɒsəti/, US: /ˌkjʊriˈɑːsəti/ ; An eager wish to know or learn about something, Her curiosity about the ancient ruins led her to study archaeology, Njena radovednost o starih ruševinah jo je pripeljala do študija arheologije
+(at) full throttle, Idiom, /(æt) fʊl ˈθrɒtəl/ ; moving or progressing as fast as possible, She was roaring up the freeway at full throttle., S polnim plinom je drvela po avtocesti.
+audit, Noun, UK: /ˈɔː.dɪt/, US: /ˈɑː.dɪt/ ; an official examination of the accounts of a business, An internal audit uncovered £11.5 million in payments to dead beneficiaries., Notranja revizija je razkrila 11,5 milijona funtov izplačil umrlim upravičencem.
+average Joe, Noun, Idiom, /ˈævᵊrɪʤ ʤəʊ/ ; an ordinary, typical person, He says it takes him longer than the average Joe to get ready for work., Pravi, da se za delo pripravlja dlje kot kot povprečen človek.
 ```
 
 ## Importing to Quizlet
@@ -52,17 +50,17 @@ Curiosity, Noun, UK: /ˌkjʊəriˈɒsəti/, US: /ˌkjʊriˈɑːsəti/ ; An eager
 
 ## Features
 
-- Extracts all required fields:
+- Extracts all required fields from HTML glossary entries:
   - Concept name
-  - Word type (noun, verb, adjective, idiom, etc.)
-  - Phonetic transcription with UK/US labels
-  - Definition
-  - Example sentence
-  - Slovenian translation of example
-- Handles various HTML structures
-- Removes duplicate entries
-- Cleans and normalizes text
-- Properly handles HTML entities
+  - Word type (noun, verb, adjective, idiom, etc. - supports multiple types)
+  - Phonetic transcription with UK/US labels where applicable
+  - Definition (from `<strong>` tags or paragraph content)
+  - Example sentence (from `<em>` tags)
+  - Slovenian translation of example (from `<em>` tags)
+- Handles various HTML structures and formatting inconsistencies
+- Removes duplicate entries automatically
+- Cleans and normalizes text (HTML entities, whitespace)
+- Outputs clean, ready-to-import format
 
 ## Notes
 
@@ -73,9 +71,14 @@ Curiosity, Noun, UK: /ˌkjʊəriˈɒsəti/, US: /ˌkjʊriˈɑːsəti/ ; An eager
 
 ## Troubleshooting
 
-If no entries are found:
+### If no entries or few entries are found:
 1. Check that the HTML file exists in the correct location
-2. Verify the HTML structure matches expected patterns
-3. The parser may need to be adjusted for your specific HTML format
+2. Verify the HTML contains glossary entries in expected format
+3. Check the console output for "Incomplete entry" messages - these show which fields are missing
 
-Once the HTML file is available, the parser can be refined to match the exact structure of your glossary entries.
+### Common issues:
+- **Missing examples/translations**: Some entries in the HTML might not have example sentences or translations formatted correctly (missing `<em>` tags)
+- **Missing pronunciation**: Some entries might not have pronunciation in the expected `/.../ ` format
+- **Definition not found**: Definition should be in `<strong>` tags or be a longer paragraph
+
+The parser only includes entries that have ALL 6 required fields populated.
