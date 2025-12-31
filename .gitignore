@@ -1,6 +1,5 @@
-# Glossary parser input/output files
+# Glossary parser input file (keep output)
 glossary items in page html.txt
-quizlet-flashcards.txt
 
 # Node modules
 node_modules/
