@@ -24,13 +24,34 @@ class GlossaryEntry:
         self.translation = ""
     
     def is_complete(self):
-        return all([self.name, self.type, self.pronunciation, 
-                   self.definition, self.example, self.translation])
+        """Check if entry has minimum required fields (name and at least type)"""
+        # At minimum, we need a name and type
+        return self.name and self.type
     
     def format_for_quizlet(self):
-        front = f"{self.name}, {self.type}, {self.pronunciation}"
-        back = f"{self.definition}, {self.example}, {self.translation}"
+        """Format entry for Quizlet import - use only available fields"""
+        # Front: Always include name and type, add pronunciation if available
+        front_parts = [self.name]
+        if self.type:
+            front_parts.append(self.type)
+        if self.pronunciation:
+            front_parts.append(self.pronunciation)
+        front = ', '.join(front_parts)
+        
+        # Back: Include whatever we have - definition, example, translation
+        back_parts = []
+        if self.definition:
+            back_parts.append(self.definition)
+        if self.example:
+            back_parts.append(self.example)
+        if self.translation:
+            back_parts.append(self.translation)
+        
+        # If we have nothing for the back, use a placeholder
+        back = ', '.join(back_parts) if back_parts else '[No additional information available]'
+        
         return f"{front} ; {back}"
+
 
 
 def clean_text(text):
@@ -157,17 +178,40 @@ def extract_definition(paragraphs_raw):
     return ""
 
 
-def extract_examples(paragraphs_raw):
-    """Extract example sentences (English and Slovenian)"""
+def extract_examples(content):
+    """Extract example sentences (English and Slovenian) from various formats"""
     examples = []
     
-    for p in paragraphs_raw:
-        # Examples are in <em> or <i> tags
-        em_matches = re.findall(r'<(?:em|i)[^>]*>(.*?)</(?:em|i)>', p, re.DOTALL)
-        for em in em_matches:
-            text = strip_html(em)
-            if text and len(text) > 5:
+    # Method 1: Extract from <em> or <i> tags (original method)
+    em_matches = re.findall(r'<(?:em|i)[^>]*>(.*?)</(?:em|i)>', content, re.DOTALL)
+    for em in em_matches:
+        text = strip_html(em)
+        if text and len(text) > 5 and not text.startswith('From:'):
+            examples.append(text)
+    
+    # Method 2: Extract from <div class="examp dexamp"> tags
+    if len(examples) < 2:
+        div_matches = re.findall(r'<div[^>]*class="[^"]*examp[^"]*"[^>]*>(.*?)</div>', content, re.DOTALL)
+        for div in div_matches:
+            text = strip_html(div)
+            if text and len(text) > 5 and not text.startswith('From:'):
                 examples.append(text)
+    
+    # Method 3: Extract from plain <p> tags (for entries without em/div tags)
+    # Only use this if we still don't have examples
+    if len(examples) < 2:
+        paragraphs_raw = re.findall(r'<p[^>]*>(.*?)</p>', content, re.DOTALL | re.IGNORECASE)
+        for p in paragraphs_raw:
+            text = strip_html(p)
+            # Skip if it's type, pronunciation, definition, or source
+            if (text and len(text) > 15 and 
+                not extract_type(text) and 
+                not ('/' in p and len(text) < 80) and
+                not '<strong>' in p and
+                not text.startswith('From:')):
+                # Check if it looks like an example sentence (has subject and verb)
+                if any(word in text.lower() for word in ['i ', 'he ', 'she ', 'they ', 'we ', 'you ', 'the ', 'a ']):
+                    examples.append(text)
     
     return examples
 
@@ -193,8 +237,8 @@ def parse_entry(concept_name, content):
     # Extract definition
     entry.definition = extract_definition(paragraphs_raw)
     
-    # Extract examples
-    examples = extract_examples(paragraphs_raw)
+    # Extract examples - pass full content to handle different formats
+    examples = extract_examples(content)
     
     if len(examples) >= 2:
         entry.example = examples[0]
