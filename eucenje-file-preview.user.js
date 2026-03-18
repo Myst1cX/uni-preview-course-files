@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Preview PDFs, .DOCX, .PPTX and .XLSX files on E-Ucenje
 // @namespace    http://tampermonkey.net/
-// @version      3.8
+// @version      3.9
 // @description  The files are previewed in a new tab using blob URLs.
 // @author       Myst1cX
 // @match        *://e-ucenje.ff.uni-lj.si/*
@@ -611,6 +611,37 @@ function isForumAttachmentUrl(url) {
     return url.includes('pluginfile.php') && url.includes('/mod_forum/attachment/');
 }
 
+// Matches Moodle assignment submission file URLs (e.g. pluginfile.php/.../assignsubmission_file/...)
+function isAssignSubmissionUrl(url) {
+    return url.includes('pluginfile.php') && url.includes('/assignsubmission_');
+}
+
+// Matches Moodle folder file URLs served via pluginfile.php (e.g. mod/folder/view.php file links)
+function isFolderFileUrl(url) {
+    return url.includes('pluginfile.php') && url.includes('/mod_folder/');
+}
+
+async function previewFile(url) {
+    const ext = getFileExtension(url.toLowerCase());
+    if (ext === 'pdf') {
+        await openPdfBlobViewer(url);
+    } else if (ext === 'docx') {
+        await openDocxWithMammoth(url);
+    } else if (ext === 'doc') {
+        alert('Preview not supported for .doc files. Please convert to .docx to view.');
+    } else if (ext === 'pptx') {
+        await openPptxWithPptxJs(url);
+    } else if (ext === 'ppt') {
+        alert('Preview not supported for .ppt files. Please convert to .pptx to view.');
+    } else if (ext === 'xlsx') {
+        await openXlsxWithSheetJs(url);
+    } else if (ext === 'xls') {
+        alert('Preview not supported for .xls files. Please convert to .xlsx to view.');
+    } else {
+        alert('Preview not supported for this file type.');
+    }
+}
+
 function addPreviewButtons() {
     document.querySelectorAll('a[href]').forEach(link => {
         const href = link.getAttribute('href');
@@ -624,9 +655,13 @@ function addPreviewButtons() {
 
 const isPreviewable = (
     isEUcenje && (
-        ext && supportedExtensions.includes(`.${ext}`) ||
+        (ext && supportedExtensions.includes(`.${ext}`)) ||
         isMoodleResourceLink(fullUrl) ||
-        isForumAttachmentUrl(fullUrl)
+        isForumAttachmentUrl(fullUrl) ||
+        // Assignment submission attachments (mod/assign/view.php file links)
+        isAssignSubmissionUrl(fullUrl) ||
+        // Folder file links (mod/folder/view.php file links, including PDFs)
+        isFolderFileUrl(fullUrl)
     )
 );
 
@@ -647,42 +682,47 @@ const isPreviewable = (
 
             let targetUrl = fullUrl;
 
-            if (isMoodleResourceLink(targetUrl) || isForumAttachmentUrl(targetUrl)) {
+            if (isMoodleResourceLink(targetUrl) || isForumAttachmentUrl(targetUrl) ||
+                isAssignSubmissionUrl(targetUrl) || isFolderFileUrl(targetUrl)) {
                 targetUrl = await getFinalUrl(targetUrl);
             }
 
-            const finalExt = getFileExtension(targetUrl);
-
-            if (finalExt === 'pdf') {
-    await openPdfBlobViewer(targetUrl);
-} else if (finalExt === 'docx' || finalExt === 'doc') {
-    if (finalExt === 'doc') {
-        alert('Preview not supported for .doc files. Please convert to .docx to view.');
-    } else {
-        await openDocxWithMammoth(targetUrl);
-    }
-} else if (finalExt === 'pptx' || finalExt === 'ppt') {
-    if (finalExt === 'ppt') {
-        alert('Preview not supported for .ppt files. Please convert to .pptx to view.');
-    } else {
-        await openPptxWithPptxJs(targetUrl);
-    }
-} else if (finalExt === 'xlsx' || finalExt === 'xls') {
-    if (finalExt === 'xls') {
-        alert('Preview not supported for .xls files. Please convert to .xlsx to view.');
-    } else {
-        await openXlsxWithSheetJs(targetUrl);
-    }
-} else {
-    alert('Preview not supported for this file type.');
-}
-
+            await previewFile(targetUrl);
         });
 
         link.parentNode.insertBefore(wrapper, link);
         wrapper.appendChild(btn);
         wrapper.appendChild(link);
     });
+}
+
+// Injects a floating preview button when the current page IS a direct pluginfile.php
+// file URL (e.g. a forum attachment opened directly in a tab). Guarded by element ID
+// so it is only injected once even when run() polls every 2 seconds.
+function addDirectPagePreviewButton() {
+    if (!isEUcenje) return;
+    if (!location.href.includes('pluginfile.php')) return;
+    if (document.getElementById('preview-direct-page-btn')) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'preview-direct-page-btn';
+    btn.type = 'button';
+    btn.title = 'Preview Document';
+    btn.innerHTML = eyeIcon;
+    btn.style.cssText = [
+        'position:fixed', 'top:16px', 'right:16px', 'z-index:99999',
+        'border:none', 'background:#4285F4', 'color:white',
+        'border-radius:50%', 'width:48px', 'height:48px',
+        'cursor:pointer', 'display:flex', 'align-items:center',
+        'justify-content:center', 'box-shadow:0 2px 8px rgba(0,0,0,0.3)',
+        'padding:0'
+    ].join(';');
+
+    btn.addEventListener('click', async () => {
+        await previewFile(location.href);
+    });
+
+    document.body.appendChild(btn);
 }
 
 
@@ -722,6 +762,7 @@ const isPreviewable = (
 
     function run() {
         addPreviewButtons();
+        addDirectPagePreviewButton(); // idempotent: only injects once on direct pluginfile.php pages
         setTimeout(run, 2000);
     }
 
