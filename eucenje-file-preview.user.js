@@ -611,6 +611,67 @@ function isForumAttachmentUrl(url) {
     return url.includes('pluginfile.php') && url.includes('/mod_forum/attachment/');
 }
 
+function isAssignmentSubmissionUrl(url) {
+    return url.includes('pluginfile.php') && url.includes('/assignsubmission_file/');
+}
+
+function getHeaderValue(headers, name) {
+    if (!headers) return null;
+    const regex = new RegExp(`^${name}:\\s*(.*)$`, 'im');
+    const match = headers.match(regex);
+    return match ? match[1].trim() : null;
+}
+
+function getExtensionFromContentDisposition(contentDisposition) {
+    if (!contentDisposition) return null;
+    const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+    if (utf8Match?.[1]) {
+        const decoded = decodeURIComponent(utf8Match[1].replace(/["']/g, ''));
+        return getFileExtension(decoded);
+    }
+    const basicMatch = contentDisposition.match(/filename\s*=\s*("?)([^";]+)\1/i);
+    if (basicMatch?.[2]) return getFileExtension(basicMatch[2]);
+    return null;
+}
+
+function getExtensionFromContentType(contentType) {
+    if (!contentType) return null;
+    const lowered = contentType.toLowerCase();
+    if (lowered.includes('application/pdf')) return 'pdf';
+    if (lowered.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document')) return 'docx';
+    if (lowered.includes('application/msword')) return 'doc';
+    if (lowered.includes('application/vnd.openxmlformats-officedocument.presentationml.presentation')) return 'pptx';
+    if (lowered.includes('application/vnd.ms-powerpoint')) return 'ppt';
+    if (lowered.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) return 'xlsx';
+    if (lowered.includes('application/vnd.ms-excel')) return 'xls';
+    return null;
+}
+
+function detectFileExtensionFromRealFetch(url) {
+    return new Promise(resolve => {
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url,
+            responseType: 'arraybuffer',
+            headers: { 'Accept': '*/*' },
+            onload: resp => {
+                const finalUrl = resp.finalUrl || resp.responseURL || url;
+                const headers = resp.responseHeaders || '';
+                const contentDisposition = getHeaderValue(headers, 'content-disposition');
+                const contentType = getHeaderValue(headers, 'content-type');
+
+                const detectedExt =
+                    getFileExtension(finalUrl) ||
+                    getExtensionFromContentDisposition(contentDisposition) ||
+                    getExtensionFromContentType(contentType);
+
+                resolve(detectedExt || null);
+            },
+            onerror: () => resolve(null)
+        });
+    });
+}
+
 function addPreviewButtons() {
     document.querySelectorAll('a[href]').forEach(link => {
         const href = link.getAttribute('href');
@@ -626,7 +687,8 @@ const isPreviewable = (
     isEUcenje && (
         ext && supportedExtensions.includes(`.${ext}`) ||
         isMoodleResourceLink(fullUrl) ||
-        isForumAttachmentUrl(fullUrl)
+        isForumAttachmentUrl(fullUrl) ||
+        isAssignmentSubmissionUrl(fullUrl)
     )
 );
 
@@ -645,13 +707,15 @@ const isPreviewable = (
             e.preventDefault();
             e.stopPropagation();
 
-            let targetUrl = fullUrl;
-
-            if (isMoodleResourceLink(targetUrl) || isForumAttachmentUrl(targetUrl)) {
-                targetUrl = await getFinalUrl(targetUrl);
+            const targetUrl = fullUrl;
+            let finalExt = getFileExtension(targetUrl);
+            if (!finalExt && (
+                isMoodleResourceLink(targetUrl) ||
+                isForumAttachmentUrl(targetUrl) ||
+                isAssignmentSubmissionUrl(targetUrl)
+            )) {
+                finalExt = await detectFileExtensionFromRealFetch(targetUrl);
             }
-
-            const finalExt = getFileExtension(targetUrl);
 
             if (finalExt === 'pdf') {
     await openPdfBlobViewer(targetUrl);
