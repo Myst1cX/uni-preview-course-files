@@ -810,7 +810,7 @@ const isPreviewable = (
                     alert('Preview not supported for this file type.');
                 }
             } catch (err) {
-                alert('Error previewing file:\n' + (err?.message || err));
+                alert('Error previewing file:\n' + String(err?.message || err));
             }
 
         });
