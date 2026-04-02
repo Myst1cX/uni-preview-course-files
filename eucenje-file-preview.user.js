@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Preview PDFs, .DOCX, .PPTX and .XLSX files on E-Ucenje
 // @namespace    http://tampermonkey.net/
-// @version      3.9
+// @version      4.0
 // @description  The files are previewed in a new tab using blob URLs.
 // @author       Myst1cX
 // @match        *://e-ucenje.ff.uni-lj.si/*
@@ -22,6 +22,14 @@
 
     const isMoodleResourceLink = url => {
       try { return isEUcenje && new URL(url).pathname.includes('/mod/resource/view.php'); }
+      catch { return false; }
+    };
+    const isMoodleAssignmentViewLink = url => {
+      try { return isEUcenje && new URL(url).pathname.includes('/mod/assign/view.php'); }
+      catch { return false; }
+    };
+    const isMoodleFolderViewLink = url => {
+      try { return isEUcenje && new URL(url).pathname.includes('/mod/folder/view.php'); }
       catch { return false; }
     };
 
@@ -684,6 +692,41 @@ function detectFileExtensionFromRealFetch(url) {
     });
 }
 
+function detectFileExtensionFromGetRequest(url) {
+    return new Promise(resolve => {
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url,
+            headers: {
+                'Accept': '*/*',
+                'Range': 'bytes=0-0'
+            },
+            onload: resp => {
+                try {
+                    const finalUrl = resp.finalUrl || resp.responseURL || url;
+                    const responseHeaders = resp.responseHeaders || '';
+                    const contentDisposition = getHeaderValue(responseHeaders, 'content-disposition');
+                    const contentType = getHeaderValue(responseHeaders, 'content-type');
+
+                    const detectedExt =
+                        getFileExtension(finalUrl) ||
+                        getExtensionFromContentDisposition(contentDisposition) ||
+                        getExtensionFromContentType(contentType);
+
+                    resolve(detectedExt || null);
+                } catch (err) {
+                    console.warn('Preview extension detection GET parsing failed:', err);
+                    resolve(null);
+                }
+            },
+            onerror: err => {
+                console.warn('Preview extension detection GET request failed:', err);
+                resolve(null);
+            }
+        });
+    });
+}
+
 function addPreviewButtons() {
     document.querySelectorAll('a[href]').forEach(link => {
         const href = link.getAttribute('href');
@@ -699,6 +742,8 @@ const isPreviewable = (
     isEUcenje && (
         ext && supportedExtensions.includes(`.${ext}`) ||
         isMoodleResourceLink(fullUrl) ||
+        isMoodleAssignmentViewLink(fullUrl) ||
+        isMoodleFolderViewLink(fullUrl) ||
         isForumAttachmentUrl(fullUrl) ||
         isAssignmentSubmissionUrl(fullUrl)
     )
@@ -722,6 +767,8 @@ const isPreviewable = (
             try {
                 const shouldResolve = (
                     isMoodleResourceLink(fullUrl) ||
+                    isMoodleAssignmentViewLink(fullUrl) ||
+                    isMoodleFolderViewLink(fullUrl) ||
                     isForumAttachmentUrl(fullUrl) ||
                     isAssignmentSubmissionUrl(fullUrl)
                 );
@@ -734,6 +781,9 @@ const isPreviewable = (
                 let finalExt = getFileExtension(targetUrl);
                 if (!finalExt && shouldResolve) {
                     finalExt = await detectFileExtensionFromRealFetch(targetUrl);
+                }
+                if (!finalExt && shouldResolve) {
+                    finalExt = await detectFileExtensionFromGetRequest(targetUrl);
                 }
 
                 if (finalExt === 'pdf') {
