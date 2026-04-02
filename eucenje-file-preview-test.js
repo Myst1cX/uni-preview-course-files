@@ -13,6 +13,13 @@
 // @downloadURL  https://raw.githubusercontent.com/Myst1cX/uni-preview-course-files/main/eucenje-file-preview.user.js
 // ==/UserScript==
 
+// attempted to make it work on /assignments and /folders - doesn't work still
+// presumably because my script is fetching just a url that only works inside moodle's redirect chain
+// analyze content.js file (inside repository) which actually makes it work
+
+
+
+
 (function () {
     'use strict';
 
