@@ -627,8 +627,12 @@ function getExtensionFromContentDisposition(contentDisposition) {
     if (!contentDisposition) return null;
     const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
     if (utf8Match?.[1]) {
-        const decoded = decodeURIComponent(utf8Match[1].replace(/["']/g, ''));
-        return getFileExtension(decoded);
+        try {
+            const decoded = decodeURIComponent(utf8Match[1].replace(/["']/g, ''));
+            return getFileExtension(decoded);
+        } catch {
+            return null;
+        }
     }
     const basicMatch = contentDisposition.match(/filename\s*=\s*("?)([^";]+)\1/i);
     if (basicMatch?.[2]) return getFileExtension(basicMatch[2]);
@@ -650,20 +654,12 @@ function getExtensionFromContentType(contentType) {
 
 function detectFileExtensionFromRealFetch(url) {
     return new Promise(resolve => {
-        const request = (useRange = true) => {
-            const headers = { 'Accept': '*/*' };
-            if (useRange) headers.Range = 'bytes=0-0';
-
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url,
-                headers,
-                onload: resp => {
-                    if (useRange && resp.status === 416) {
-                        request(false);
-                        return;
-                    }
-
+        GM_xmlhttpRequest({
+            method: 'HEAD',
+            url,
+            headers: { 'Accept': '*/*' },
+            onload: resp => {
+                try {
                     const finalUrl = resp.finalUrl || resp.responseURL || url;
                     const responseHeaders = resp.responseHeaders || '';
                     const contentDisposition = getHeaderValue(responseHeaders, 'content-disposition');
@@ -675,19 +671,16 @@ function detectFileExtensionFromRealFetch(url) {
                         getExtensionFromContentType(contentType);
 
                     resolve(detectedExt || null);
-                },
-                onerror: err => {
-                    if (useRange) {
-                        request(false);
-                        return;
-                    }
-                    console.warn('Preview extension detection request failed:', err);
+                } catch (err) {
+                    console.warn('Preview extension detection parsing failed:', err);
                     resolve(null);
                 }
-            });
-        };
-
-        request(true);
+            },
+            onerror: err => {
+                console.warn('Preview extension detection request failed:', err);
+                resolve(null);
+            }
+        });
     });
 }
 
@@ -726,39 +719,49 @@ const isPreviewable = (
             e.preventDefault();
             e.stopPropagation();
 
-            const targetUrl = fullUrl;
-            let finalExt = getFileExtension(targetUrl);
-            if (!finalExt && (
-                isMoodleResourceLink(targetUrl) ||
-                isForumAttachmentUrl(targetUrl) ||
-                isAssignmentSubmissionUrl(targetUrl)
-            )) {
-                finalExt = await detectFileExtensionFromRealFetch(targetUrl);
-            }
+            try {
+                const shouldResolve = (
+                    isMoodleResourceLink(fullUrl) ||
+                    isForumAttachmentUrl(fullUrl) ||
+                    isAssignmentSubmissionUrl(fullUrl)
+                );
 
-            if (finalExt === 'pdf') {
-    await openPdfBlobViewer(targetUrl);
-} else if (finalExt === 'docx' || finalExt === 'doc') {
-    if (finalExt === 'doc') {
-        alert('Preview not supported for .doc files. Please convert to .docx to view.');
-    } else {
-        await openDocxWithMammoth(targetUrl);
-    }
-} else if (finalExt === 'pptx' || finalExt === 'ppt') {
-    if (finalExt === 'ppt') {
-        alert('Preview not supported for .ppt files. Please convert to .pptx to view.');
-    } else {
-        await openPptxWithPptxJs(targetUrl);
-    }
-} else if (finalExt === 'xlsx' || finalExt === 'xls') {
-    if (finalExt === 'xls') {
-        alert('Preview not supported for .xls files. Please convert to .xlsx to view.');
-    } else {
-        await openXlsxWithSheetJs(targetUrl);
-    }
-} else {
-    alert('Preview not supported for this file type.');
-}
+                let targetUrl = fullUrl;
+                if (shouldResolve) {
+                    targetUrl = await getFinalUrl(targetUrl);
+                }
+
+                let finalExt = getFileExtension(targetUrl);
+                if (!finalExt && shouldResolve) {
+                    finalExt = await detectFileExtensionFromRealFetch(targetUrl);
+                }
+
+                if (finalExt === 'pdf') {
+                    await openPdfBlobViewer(targetUrl);
+                } else if (finalExt === 'docx' || finalExt === 'doc') {
+                    if (finalExt === 'doc') {
+                        alert('Preview not supported for .doc files. Please convert to .docx to view.');
+                    } else {
+                        await openDocxWithMammoth(targetUrl);
+                    }
+                } else if (finalExt === 'pptx' || finalExt === 'ppt') {
+                    if (finalExt === 'ppt') {
+                        alert('Preview not supported for .ppt files. Please convert to .pptx to view.');
+                    } else {
+                        await openPptxWithPptxJs(targetUrl);
+                    }
+                } else if (finalExt === 'xlsx' || finalExt === 'xls') {
+                    if (finalExt === 'xls') {
+                        alert('Preview not supported for .xls files. Please convert to .xlsx to view.');
+                    } else {
+                        await openXlsxWithSheetJs(targetUrl);
+                    }
+                } else {
+                    alert('Preview not supported for this file type.');
+                }
+            } catch (err) {
+                alert('Error previewing file:\n' + (err?.message || err));
+            }
 
         });
 
