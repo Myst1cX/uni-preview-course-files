@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Preview PDFs, .DOCX, .PPTX and .XLSX files on E-Ucenje
 // @namespace    http://tampermonkey.net/
-// @version      3.8
+// @version      3.9
 // @description  The files are previewed in a new tab using blob URLs.
 // @author       Myst1cX
 // @match        *://e-ucenje.ff.uni-lj.si/*
@@ -17,7 +17,7 @@
     'use strict';
 
     const isEUcenje = location.hostname.includes('e-ucenje.ff.uni-lj.si');
-    const supportedExtensions = ['.doc', '.docx', '.pptx', '.xlsx'];
+    const supportedExtensions = ['.pdf', '.docx', '.pptx', '.xlsx'];
     const pdfjsViewerBase = 'https://mozilla.github.io/pdf.js/web/viewer.html?file=';
 
     const isMoodleResourceLink = url => {
