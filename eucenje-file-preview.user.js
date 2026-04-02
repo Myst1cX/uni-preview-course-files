@@ -617,7 +617,8 @@ function isAssignmentSubmissionUrl(url) {
 
 function getHeaderValue(headers, name) {
     if (!headers) return null;
-    const regex = new RegExp(`^${name}:\\s*(.*)$`, 'im');
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`^${escapedName}:\\s*(.*)$`, 'im');
     const match = headers.match(regex);
     return match ? match[1].trim() : null;
 }
@@ -649,26 +650,44 @@ function getExtensionFromContentType(contentType) {
 
 function detectFileExtensionFromRealFetch(url) {
     return new Promise(resolve => {
-        GM_xmlhttpRequest({
-            method: 'GET',
-            url,
-            responseType: 'arraybuffer',
-            headers: { 'Accept': '*/*' },
-            onload: resp => {
-                const finalUrl = resp.finalUrl || resp.responseURL || url;
-                const headers = resp.responseHeaders || '';
-                const contentDisposition = getHeaderValue(headers, 'content-disposition');
-                const contentType = getHeaderValue(headers, 'content-type');
+        const request = (useRange = true) => {
+            const headers = { 'Accept': '*/*' };
+            if (useRange) headers.Range = 'bytes=0-0';
 
-                const detectedExt =
-                    getFileExtension(finalUrl) ||
-                    getExtensionFromContentDisposition(contentDisposition) ||
-                    getExtensionFromContentType(contentType);
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url,
+                headers,
+                onload: resp => {
+                    if (useRange && resp.status === 416) {
+                        request(false);
+                        return;
+                    }
 
-                resolve(detectedExt || null);
-            },
-            onerror: () => resolve(null)
-        });
+                    const finalUrl = resp.finalUrl || resp.responseURL || url;
+                    const responseHeaders = resp.responseHeaders || '';
+                    const contentDisposition = getHeaderValue(responseHeaders, 'content-disposition');
+                    const contentType = getHeaderValue(responseHeaders, 'content-type');
+
+                    const detectedExt =
+                        getFileExtension(finalUrl) ||
+                        getExtensionFromContentDisposition(contentDisposition) ||
+                        getExtensionFromContentType(contentType);
+
+                    resolve(detectedExt || null);
+                },
+                onerror: err => {
+                    if (useRange) {
+                        request(false);
+                        return;
+                    }
+                    console.warn('Preview extension detection request failed:', err);
+                    resolve(null);
+                }
+            });
+        };
+
+        request(true);
     });
 }
 
